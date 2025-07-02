@@ -1,11 +1,12 @@
-﻿// Fixed src/core/audio_interface.cpp - matches your project structure
+﻿// src/core/audio_interface.cpp
+// Clean update that adds ASIO integration to your working foundation
 #include "syntri/types.h"
 #include "syntri/audio_interface.h"
 #include <iostream>
-#include <algorithm>  // Add this missing include
 #include <string>
 #include <memory>
 
+// Only include ASIO interface if ASIO support is enabled
 #ifdef ENABLE_ASIO_SUPPORT
 #include "syntri/asio_interface.h"
 #endif
@@ -15,29 +16,32 @@ namespace Syntri {
     std::vector<HardwareType> detectAvailableHardware() {
         std::vector<HardwareType> available_hardware;
 
-        std::cout << "Scanning for professional audio hardware..." << std::endl;
+        std::cout << "Detecting available audio hardware..." << std::endl;
 
 #ifdef ENABLE_ASIO_SUPPORT
-        // Try to detect real ASIO hardware
+        // Try to detect real ASIO hardware first
         try {
-            auto asio_interface = std::make_unique<ASIOInterface>();
+            auto asio_interface = createASIOInterface();
             if (asio_interface && asio_interface->initialize()) {
                 auto detected_type = asio_interface->getType();
                 available_hardware.push_back(detected_type);
 
-                std::cout << "   Found: " << hardwareTypeToString(detected_type) << std::endl;
+                std::cout << "Found ASIO hardware: " << hardwareTypeToString(detected_type) << std::endl;
                 asio_interface->shutdown();
+            }
+            else {
+                std::cout << "ASIO hardware detection failed" << std::endl;
             }
         }
         catch (const std::exception& e) {
-            std::cout << "   ASIO detection failed: " << e.what() << std::endl;
+            std::cout << "ASIO detection error: " << e.what() << std::endl;
         }
 #endif
 
-        // Always add stub interface as fallback
+        // Always include generic ASIO as fallback
         if (available_hardware.empty()) {
             available_hardware.push_back(HardwareType::GENERIC_ASIO);
-            std::cout << "   No hardware detected, using simulation mode" << std::endl;
+            std::cout << "Using generic audio interface" << std::endl;
         }
 
         return available_hardware;
@@ -47,30 +51,30 @@ namespace Syntri {
         std::cout << "Creating audio interface for: " << hardwareTypeToString(type) << std::endl;
 
 #ifdef ENABLE_ASIO_SUPPORT
-        // Try real ASIO interface first
+        // Try real ASIO interface for non-generic types
         if (type != HardwareType::GENERIC_ASIO) {
             try {
-                auto asio_interface = std::make_unique<ASIOInterface>();
+                auto asio_interface = createASIOInterface();
                 if (asio_interface && asio_interface->initialize()) {
-                    std::cout << "   Real ASIO interface created successfully" << std::endl;
-                    // Fix: Use move() to convert unique_ptr<ASIOInterface> to unique_ptr<AudioInterface>
+                    std::cout << "Real ASIO interface created successfully" << std::endl;
                     return std::unique_ptr<AudioInterface>(asio_interface.release());
+                }
+                else {
+                    std::cout << "ASIO interface creation failed, falling back to generic" << std::endl;
                 }
             }
             catch (const std::exception& e) {
-                std::cout << "   ASIO interface creation failed: " << e.what() << std::endl;
+                std::cout << "ASIO interface error: " << e.what() << " - falling back to generic" << std::endl;
             }
         }
 #endif
 
-        // Fallback to stub interface
-        std::cout << "   Using stub interface (simulation mode)" << std::endl;
+        // Create generic interface (your original working stub)
+        std::cout << "Creating generic interface" << std::endl;
         return createStubInterface();
     }
 
-    
-
-    // Stub interface implementation for fallback
+    // Stub interface implementation (your original working code)
     class StubAudioInterface : public AudioInterface {
     private:
         bool initialized_ = false;
@@ -82,9 +86,9 @@ namespace Syntri {
         ~StubAudioInterface() override = default;
 
         bool initialize(int sample_rate, int buffer_size) override {
-            std::cout << "   Stub interface initialized (simulation mode)" << std::endl;
-            std::cout << "      Sample Rate: " << sample_rate << " Hz" << std::endl;
-            std::cout << "      Buffer Size: " << buffer_size << " samples" << std::endl;
+            std::cout << "Initializing generic interface (simulation mode)" << std::endl;
+            std::cout << "   Sample Rate: " << sample_rate << " Hz" << std::endl;
+            std::cout << "   Buffer Size: " << buffer_size << " samples" << std::endl;
             initialized_ = true;
             return true;
         }
@@ -92,35 +96,30 @@ namespace Syntri {
         void shutdown() override {
             if (streaming_) stopStreaming();
             initialized_ = false;
-            std::cout << "   Stub interface shutdown" << std::endl;
+            std::cout << "Generic interface shutdown" << std::endl;
         }
 
         bool isInitialized() const override { return initialized_; }
 
         HardwareType getType() const override { return detected_type_; }
-        std::string getName() const override { return "Stub Audio Interface"; }
+        std::string getName() const override { return "Generic Audio Interface"; }
         int getInputChannelCount() const override { return 8; }
         int getOutputChannelCount() const override { return 8; }
+        double getCurrentLatency() const override { return 2.5; }
 
         bool startStreaming(AudioProcessor* processor) override {
             if (!initialized_ || !processor) return false;
-
             streaming_ = true;
-            std::cout << "   Stub streaming started (no real audio)" << std::endl;
+            std::cout << "Generic streaming started (simulation)" << std::endl;
             return true;
         }
 
         void stopStreaming() override {
             streaming_ = false;
-            std::cout << "   Stub streaming stopped" << std::endl;
+            std::cout << "Generic streaming stopped" << std::endl;
         }
 
         bool isStreaming() const override { return streaming_; }
-
-        double getCurrentLatency() const override {
-            return 2.5; // Simulated latency for testing
-        }
-
         SimpleMetrics getMetrics() const override { return metrics_; }
     };
 
