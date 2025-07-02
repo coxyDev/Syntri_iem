@@ -1,7 +1,4 @@
-// Syntri Audio Interface - Hardware Abstraction Layer
-// Phase 1: Simple interface for all audio hardware
-// Copyright (c) 2025 Syntri Technologies
-
+// Fixed include/syntri/audio_interface.h - removes class redefinition
 #pragma once
 
 #include "syntri/types.h"
@@ -53,8 +50,12 @@ namespace Syntri {
         virtual SimpleMetrics getMetrics() const = 0;
     };
 
-    // Factory function for creating hardware interfaces
+    // Forward declaration only - implementation is in audio_interface.cpp
+    class StubAudioInterface;
+
+    // Factory functions for creating hardware interfaces
     std::unique_ptr<AudioInterface> createAudioInterface(HardwareType type);
+    std::unique_ptr<AudioInterface> createStubInterface();
 
     // Hardware detection
     std::vector<HardwareType> detectAvailableHardware();
