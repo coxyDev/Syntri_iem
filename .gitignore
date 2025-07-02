@@ -1,0 +1,164 @@
+# Syntri Project .gitignore
+
+# Build directories
+build/
+builds/
+out/
+cmake-build-*/
+
+# Visual Studio / Windows
+.vs/
+*.vcxproj.user
+*.vcxproj.filters
+*.sln.docstates
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+x64/
+x86/
+Debug/
+Release/
+RelWithDebInfo/
+MinSizeRel/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Testing/
+Makefile
+cmake_install.cmake
+install_manifest.txt
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Libraries
+*.lib
+*.a
+*.so
+*.dylib
+*.dll
+
+# Object files
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+
+# Logs
+*.log
+
+# Package files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Audio files (test recordings)
+*.wav
+*.aiff
+*.mp3
+*.flac
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# IDEs
+*.swp
+*.swo
+*~
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Documentation build
+docs/build/
+site/
+
+# Test results
+Testing/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Hardware-specific config files (keep templates)
+config/*.local.*
+*.local.config
+
+# Performance measurement data
+benchmarks/results/
+performance_data/
+
+# Development tools output
+tools/output/
+analysis/
+
+# Third-party dependencies (if not using git submodules)
+third_party/downloaded/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# ASIO SDK (as it's proprietary)
+third_party/asio_sdk/
+*asio_sdk*
+
+# Hardware driver files
+drivers/
