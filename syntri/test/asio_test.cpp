@@ -1,216 +1,349 @@
 ﻿// test/asio_test.cpp
-// Clean ASIO integration test that builds on your working foundation
-#include "syntri/types.h"
+// ASIO integration testing that works with your existing structure
+#include "syntri/asio_interface.h"
 #include "syntri/audio_interface.h"
 #include <iostream>
-#include <iomanip>
+#include <thread>
+#include <chrono>
+#include <vector>
+#include <memory>
 
-#ifdef ENABLE_ASIO_SUPPORT
-#include "syntri/asio_interface.h"
-#endif
+using namespace Syntri;
 
-class TestAudioProcessor : public Syntri::AudioProcessor {
-public:
-    void processAudio(
-        const Syntri::MultiChannelBuffer& inputs,
-        Syntri::MultiChannelBuffer& outputs,
-        int num_samples
-    ) override {
-        // Simple pass-through processing
-        outputs.resize(inputs.size());
-        for (size_t ch = 0; ch < outputs.size(); ++ch) {
-            outputs[ch].resize(num_samples);
-            for (int sample = 0; sample < num_samples; ++sample) {
-                outputs[ch][sample] = (ch < inputs.size()) ? inputs[ch][sample] * 0.5f : 0.0f;
-            }
-        }
-    }
+// Test configuration
+const int TEST_SAMPLE_RATE = SAMPLE_RATE_48K;
+const int TEST_BUFFER_SIZE = BUFFER_SIZE_LOW;
+const int TEST_DURATION_MS = 1000;  // 1 second
 
-    void setupChanged(int sample_rate, int buffer_size) override {
-        std::cout << "      Audio setup: " << sample_rate << "Hz, " << buffer_size << " samples" << std::endl;
-    }
+// Test results tracking
+struct TestResult {
+    bool passed;
+    std::string description;
+    std::string details;
 };
 
-void printHeader() {
-    std::cout << std::string(70, '=') << std::endl;
-    std::cout << "  SYNTRI ASIO INTEGRATION TEST" << std::endl;
-    std::cout << "  Building on Working Foundation" << std::endl;
-    std::cout << std::string(70, '=') << std::endl;
+std::vector<TestResult> test_results;
+
+void addTestResult(bool passed, const std::string& description, const std::string& details = "") {
+    test_results.push_back({ passed, description, details });
+    std::cout << (passed ? "PASS " : "FAIL ") << description;
+    if (!details.empty()) {
+        std::cout << " - " << details;
+    }
+    std::cout << std::endl;
 }
 
-bool testHardwareDetection() {
-    std::cout << "\nTest 1: Hardware Detection" << std::endl;
+void printTestSummary() {
+    int passed = 0;
+    int total = test_results.size();
+
+    std::cout << "\n" << std::string(50, '=') << std::endl;
+    std::cout << "ASIO Test Summary" << std::endl;
+    std::cout << std::string(50, '=') << std::endl;
+
+    for (const auto& result : test_results) {
+        if (result.passed) passed++;
+        std::cout << (result.passed ? "PASS" : "FAIL") << " " << result.description << std::endl;
+        if (!result.details.empty()) {
+            std::cout << "     " << result.details << std::endl;
+        }
+    }
+
+    std::cout << std::string(50, '=') << std::endl;
+    std::cout << "Results: " << passed << "/" << total << " tests passed" << std::endl;
+
+    if (passed == total) {
+        std::cout << "ALL ASIO TESTS PASSED!" << std::endl;
+        std::cout << "ASIO integration is working correctly!" << std::endl;
+    }
+    else {
+        std::cout << "Some tests failed - check ASIO setup" << std::endl;
+    }
+    std::cout << std::string(50, '=') << std::endl;
+}
+
+// Test ASIO interface creation
+bool testASIOInterfaceCreation() {
+    std::cout << "\nTesting ASIO interface creation..." << std::endl;
 
     try {
-        auto available_hardware = Syntri::detectAvailableHardware();
-
-        if (available_hardware.empty()) {
-            std::cout << "   No hardware detected" << std::endl;
-            return false;
-        }
-
-        std::cout << "   Found " << available_hardware.size() << " hardware interface(s):" << std::endl;
-        for (auto hw_type : available_hardware) {
-            std::cout << "      • " << Syntri::hardwareTypeToString(hw_type) << std::endl;
-        }
-
+        auto asio_interface = std::make_unique<ASIOInterface>();
+        addTestResult(true, "ASIO interface creation", "Interface created successfully");
         return true;
-
     }
     catch (const std::exception& e) {
-        std::cout << "   Hardware detection failed: " << e.what() << std::endl;
+        addTestResult(false, "ASIO interface creation", std::string("Exception: ") + e.what());
         return false;
     }
 }
 
-bool testGenericInterface() {
-    std::cout << "\nTest 2: Generic Interface (Your Working Foundation)" << std::endl;
+// Test ASIO driver enumeration
+bool testASIODriverEnumeration() {
+    std::cout << "\nTesting ASIO driver enumeration..." << std::endl;
 
     try {
-        auto interface = Syntri::createAudioInterface(Syntri::HardwareType::GENERIC_ASIO);
-        if (!interface) {
-            std::cout << "   Failed to create generic interface" << std::endl;
-            return false;
+        auto asio_interface = std::make_unique<ASIOInterface>();
+        auto drivers = asio_interface->getAvailableDrivers();
+
+        std::cout << "  Found " << drivers.size() << " ASIO driver(s):" << std::endl;
+        for (const auto& driver : drivers) {
+            std::cout << "    - " << driver << std::endl;
         }
 
-        if (!interface->initialize(96000, 32)) {
-            std::cout << "   Failed to initialize generic interface" << std::endl;
-            return false;
-        }
-
-        std::cout << "   Generic interface working:" << std::endl;
-        std::cout << "      Type: " << Syntri::hardwareTypeToString(interface->getType()) << std::endl;
-        std::cout << "      Name: " << interface->getName() << std::endl;
-        std::cout << "      Inputs: " << interface->getInputChannelCount() << std::endl;
-        std::cout << "      Outputs: " << interface->getOutputChannelCount() << std::endl;
-        std::cout << "      Latency: " << interface->getCurrentLatency() << " ms" << std::endl;
-
-        // Test streaming
-        TestAudioProcessor processor;
-        if (interface->startStreaming(&processor)) {
-            std::cout << "   Streaming test passed" << std::endl;
-            interface->stopStreaming();
+        if (drivers.empty()) {
+            addTestResult(true, "ASIO driver enumeration", "No drivers found (normal if no ASIO hardware)");
         }
         else {
-            std::cout << "   Streaming test failed" << std::endl;
-            return false;
+            addTestResult(true, "ASIO driver enumeration",
+                std::to_string(drivers.size()) + " driver(s) found");
         }
-
-        interface->shutdown();
         return true;
-
     }
     catch (const std::exception& e) {
-        std::cout << "   Generic interface test failed: " << e.what() << std::endl;
+        addTestResult(false, "ASIO driver enumeration", std::string("Exception: ") + e.what());
         return false;
     }
 }
 
-bool testASIOInterface() {
-    std::cout << "\nTest 3: ASIO Interface Integration" << std::endl;
+// Test ASIO hardware detection
+bool testASIOHardwareDetection() {
+    std::cout << "\nTesting ASIO hardware detection..." << std::endl;
 
-#ifdef ENABLE_ASIO_SUPPORT
     try {
-        std::cout << "   ASIO support compiled in - testing real ASIO..." << std::endl;
+        auto asio_interface = std::make_unique<ASIOInterface>();
+        auto hardware_types = asio_interface->detectHardwareTypes();
 
-        auto asio_interface = Syntri::createASIOInterface();
-        if (!asio_interface) {
-            std::cout << "   ASIO interface creation failed" << std::endl;
+        std::cout << "  Detected " << hardware_types.size() << " device type(s):" << std::endl;
+        for (const auto& hw_type : hardware_types) {
+            std::cout << "    - " << hardwareTypeToString(hw_type) << std::endl;
+        }
+
+        addTestResult(true, "ASIO hardware detection",
+            std::to_string(hardware_types.size()) + " device type(s) detected");
+        return true;
+    }
+    catch (const std::exception& e) {
+        addTestResult(false, "ASIO hardware detection", std::string("Exception: ") + e.what());
+        return false;
+    }
+}
+
+// Test ASIO interface initialization
+bool testASIOInitialization() {
+    std::cout << "\nTesting ASIO interface initialization..." << std::endl;
+
+    try {
+        auto asio_interface = std::make_unique<ASIOInterface>();
+
+        bool init_result = asio_interface->initialize(TEST_SAMPLE_RATE, TEST_BUFFER_SIZE);
+
+        if (init_result) {
+            addTestResult(true, "ASIO interface initialization", "Initialization successful");
+
+            // Test hardware info retrieval
+            std::cout << "  Hardware type: " << hardwareTypeToString(asio_interface->getType()) << std::endl;
+            std::cout << "  Hardware name: " << asio_interface->getName() << std::endl;
+            std::cout << "  Input channels: " << asio_interface->getInputChannelCount() << std::endl;
+            std::cout << "  Output channels: " << asio_interface->getOutputChannelCount() << std::endl;
+            std::cout << "  Latency: " << asio_interface->getCurrentLatency() << "ms" << std::endl;
+
+            // Clean shutdown
+            asio_interface->shutdown();
+            return true;
+        }
+        else {
+            addTestResult(false, "ASIO interface initialization", "Initialization failed");
+            return false;
+        }
+    }
+    catch (const std::exception& e) {
+        addTestResult(false, "ASIO interface initialization", std::string("Exception: ") + e.what());
+        return false;
+    }
+}
+
+// Test ASIO streaming
+bool testASIOStreaming() {
+    std::cout << "\nTesting ASIO streaming..." << std::endl;
+
+    try {
+        auto asio_interface = std::make_unique<ASIOInterface>();
+
+        // Initialize interface
+        if (!asio_interface->initialize(TEST_SAMPLE_RATE, TEST_BUFFER_SIZE)) {
+            addTestResult(false, "ASIO streaming test", "Failed to initialize interface");
             return false;
         }
 
-        if (!asio_interface->initialize(96000, 32)) {
-            std::cout << "   ASIO initialization failed (no drivers?) - this is OK" << std::endl;
-            std::cout << "   System will fall back to generic interface" << std::endl;
-            return true;  // Not a test failure
+        // Create test processor using your factory function
+        auto processor = createTestProcessor(false);  // No tone generation for test
+
+        // Start streaming
+        bool start_result = asio_interface->startStreaming(processor.get());
+        if (!start_result) {
+            addTestResult(false, "ASIO streaming test", "Failed to start streaming");
+            asio_interface->shutdown();
+            return false;
         }
 
-        std::cout << "   Real ASIO interface working:" << std::endl;
-        std::cout << "      Type: " << Syntri::hardwareTypeToString(asio_interface->getType()) << std::endl;
-        std::cout << "      Name: " << asio_interface->getName() << std::endl;
-        std::cout << "      Inputs: " << asio_interface->getInputChannelCount() << std::endl;
-        std::cout << "      Outputs: " << asio_interface->getOutputChannelCount() << std::endl;
-        std::cout << "      Latency: " << asio_interface->getCurrentLatency() << " ms" << std::endl;
+        std::cout << "  Streaming started, testing for " << TEST_DURATION_MS << "ms..." << std::endl;
 
-        // Test streaming
-        TestAudioProcessor processor;
-        if (asio_interface->startStreaming(&processor)) {
-            std::cout << "   Real ASIO streaming test passed!" << std::endl;
-
-            // Check latency target
-            double latency = asio_interface->getCurrentLatency();
-            if (latency < 3.0) {
-                std::cout << "   PHASE 1 LATENCY TARGET ACHIEVED! (" << latency << "ms < 3ms)" << std::endl;
-            }
-            else {
-                std::cout << "   Latency: " << latency << "ms (target: <3ms)" << std::endl;
-            }
-
-            asio_interface->stopStreaming();
-        }
-        else {
-            std::cout << "   ASIO streaming failed - using simulation mode" << std::endl;
+        // Check streaming status
+        if (!asio_interface->isStreaming()) {
+            addTestResult(false, "ASIO streaming test", "Interface reports not streaming");
+            asio_interface->shutdown();
+            return false;
         }
 
+        // Get metrics
+        auto metrics = asio_interface->getMetrics();
+        std::cout << "  Latency: " << metrics.latency_ms << "ms" << std::endl;
+        std::cout << "  CPU Usage: " << metrics.cpu_usage_percent << "%" << std::endl;
+
+        // Run for test duration
+        std::this_thread::sleep_for(std::chrono::milliseconds(TEST_DURATION_MS));
+
+        // Stop streaming
+        asio_interface->stopStreaming();
+
+        // Verify stopped
+        if (asio_interface->isStreaming()) {
+            addTestResult(false, "ASIO streaming test", "Interface still reports streaming after stop");
+            asio_interface->shutdown();
+            return false;
+        }
+
+        std::cout << "  Streaming stopped successfully" << std::endl;
+
+        // Clean shutdown
         asio_interface->shutdown();
+
+        addTestResult(true, "ASIO streaming test",
+            "Streaming worked for " + std::to_string(TEST_DURATION_MS) + "ms");
         return true;
 
     }
     catch (const std::exception& e) {
-        std::cout << "   ASIO test exception: " << e.what() << std::endl;
-        std::cout << "   This is OK - system will use generic interface" << std::endl;
-        return true;  // Not a test failure
+        addTestResult(false, "ASIO streaming test", std::string("Exception: ") + e.what());
+        return false;
     }
-#else
-    std::cout << "   ASIO support not compiled in" << std::endl;
-    std::cout << "   To enable: Install ASIO SDK and rebuild with ENABLE_ASIO_SUPPORT" << std::endl;
-    std::cout << "   Generic interface will be used instead" << std::endl;
-    return true;  // Not a test failure
-#endif
+}
+
+// Test integration with core audio interface functions
+bool testCoreIntegration() {
+    std::cout << "\nTesting core audio interface integration..." << std::endl;
+
+    try {
+        // Test hardware detection through core functions
+        auto hardware_types = detectAvailableHardware();
+        std::cout << "  Core detection found " << hardware_types.size() << " device type(s)" << std::endl;
+
+        if (hardware_types.empty()) {
+            addTestResult(false, "Core integration test", "No hardware detected");
+            return false;
+        }
+
+        // Test interface creation through core functions
+        auto interface = createAudioInterface(hardware_types[0]);
+        if (!interface) {
+            addTestResult(false, "Core integration test", "Failed to create interface");
+            return false;
+        }
+
+        std::cout << "  Interface created through core functions" << std::endl;
+
+        // Test basic operations
+        if (!interface->initialize(TEST_SAMPLE_RATE, TEST_BUFFER_SIZE)) {
+            addTestResult(false, "Core integration test", "Failed to initialize through core");
+            return false;
+        }
+
+        auto processor = createTestProcessor(false);
+        if (!interface->startStreaming(processor.get())) {
+            addTestResult(false, "Core integration test", "Failed to start streaming through core");
+            interface->shutdown();
+            return false;
+        }
+
+        // Brief test
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+        interface->stopStreaming();
+        interface->shutdown();
+
+        addTestResult(true, "Core integration test", "ASIO integrates correctly with core functions");
+        return true;
+
+    }
+    catch (const std::exception& e) {
+        addTestResult(false, "Core integration test", std::string("Exception: ") + e.what());
+        return false;
+    }
+}
+
+// Test graceful fallback when ASIO not available
+bool testGracefulFallback() {
+    std::cout << "\nTesting graceful fallback behavior..." << std::endl;
+
+    try {
+        // This test ensures the system works even without ASIO hardware
+        auto interface = createStubInterface();
+        if (!interface) {
+            addTestResult(false, "Graceful fallback test", "Failed to create fallback interface");
+            return false;
+        }
+
+        if (!interface->initialize()) {
+            addTestResult(false, "Graceful fallback test", "Failed to initialize fallback interface");
+            return false;
+        }
+
+        auto processor = createTestProcessor(false);
+        if (!interface->startStreaming(processor.get())) {
+            addTestResult(false, "Graceful fallback test", "Failed to start fallback streaming");
+            interface->shutdown();
+            return false;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+        interface->stopStreaming();
+        interface->shutdown();
+
+        addTestResult(true, "Graceful fallback test", "System provides working fallback");
+        return true;
+
+    }
+    catch (const std::exception& e) {
+        addTestResult(false, "Graceful fallback test", std::string("Exception: ") + e.what());
+        return false;
+    }
 }
 
 int main() {
-    printHeader();
+    std::cout << std::string(60, '=') << std::endl;
+    std::cout << "SYNTRI ASIO INTEGRATION TEST" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
+    std::cout << "Testing ASIO integration with real hardware detection" << std::endl;
+    std::cout << "Sample Rate: " << TEST_SAMPLE_RATE << " Hz" << std::endl;
+    std::cout << "Buffer Size: " << TEST_BUFFER_SIZE << " samples" << std::endl;
+    std::cout << "Test Duration: " << TEST_DURATION_MS << "ms per streaming test" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
 
-    int passed = 0;
-    int total = 3;
+    // Run all tests
+    bool all_passed = true;
 
-    std::cout << "\nTesting ASIO integration built on your working foundation...\n" << std::endl;
+    all_passed &= testASIOInterfaceCreation();
+    all_passed &= testASIODriverEnumeration();
+    all_passed &= testASIOHardwareDetection();
+    all_passed &= testASIOInitialization();
+    all_passed &= testASIOStreaming();
+    all_passed &= testCoreIntegration();
+    all_passed &= testGracefulFallback();
 
-    if (testHardwareDetection()) passed++;
-    if (testGenericInterface()) passed++;
-    if (testASIOInterface()) passed++;
+    // Print final summary
+    printTestSummary();
 
-    std::cout << "\n" << std::string(70, '=') << std::endl;
-    std::cout << "ASIO INTEGRATION TEST RESULTS" << std::endl;
-    std::cout << std::string(70, '=') << std::endl;
-    std::cout << "Tests Passed: " << passed << "/" << total << std::endl;
-
-    if (passed == total) {
-        std::cout << "\nSUCCESS: ASIO Integration Working!" << std::endl;
-        std::cout << "\nWhat's working:" << std::endl;
-        std::cout << "✅ Your original foundation is preserved" << std::endl;
-        std::cout << "✅ Generic interface still works perfectly" << std::endl;
-        std::cout << "✅ ASIO integration added cleanly" << std::endl;
-        std::cout << "✅ System gracefully falls back when ASIO not available" << std::endl;
-
-#ifdef ENABLE_ASIO_SUPPORT
-        std::cout << "\nASIO Features:" << std::endl;
-        std::cout << "✅ Real hardware communication (when drivers available)" << std::endl;
-        std::cout << "✅ Professional latency measurement" << std::endl;
-        std::cout << "✅ Phase 1 goals achievable" << std::endl;
-#else
-        std::cout << "\nTo enable real ASIO hardware communication:" << std::endl;
-        std::cout << "1. Download ASIO SDK 2.3.3 from Steinberg" << std::endl;
-        std::cout << "2. Extract to C:/asiosdk_2.3.3/" << std::endl;
-        std::cout << "3. Rebuild with ENABLE_ASIO_SUPPORT" << std::endl;
-#endif
-
-        std::cout << "\nReady for Phase 1 completion! 🎉" << std::endl;
-        return 0;
-    }
-    else {
-        std::cout << "\nSome tests failed. Check the output above for details." << std::endl;
-        return 1;
-    }
+    // Return appropriate exit code
+    return all_passed ? 0 : 1;
 }

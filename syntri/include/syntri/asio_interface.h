@@ -1,48 +1,38 @@
 // include/syntri/asio_interface.h
-// Clean ASIO integration that builds on your working foundation
+// ASIO interface that matches your existing type structure
 #pragma once
 
-#include "syntri/types.h"
 #include "syntri/audio_interface.h"
-#include <memory>
 #include <vector>
-#include <atomic>
+#include <memory>
 #include <chrono>
-#include <string>
+
+// Forward declarations to avoid header conflicts
+#ifdef ENABLE_ASIO_SUPPORT
+class AsioDrivers;
+#endif
 
 namespace Syntri {
 
-    // ASIO Interface - Real hardware communication when ASIO SDK is available
+    /**
+     * @brief ASIO-based audio interface for professional hardware integration
+     *
+     * This class provides real-time audio streaming using the ASIO (Audio Stream
+     * Input/Output) protocol, enabling low-latency communication with professional
+     * audio hardware like UAD Apollo, Allen & Heath Avantis, Behringer X32, etc.
+     *
+     * Uses your existing type structure:
+     * - HardwareType enum (not HardwareInfo struct)
+     * - MultiChannelBuffer for audio data
+     * - SimpleMetrics for performance tracking
+     */
     class ASIOInterface : public AudioInterface {
-    private:
-        // Core state
-        bool initialized_ = false;
-        bool streaming_ = false;
-        HardwareType detected_type_ = HardwareType::GENERIC_ASIO;
-        SimpleMetrics metrics_;
-        AudioProcessor* processor_ = nullptr;
-
-        // Audio configuration
-        int sample_rate_ = SAMPLE_RATE_96K;
-        int buffer_size_ = BUFFER_SIZE_ULTRA_LOW;
-        int input_channels_ = 0;
-        int output_channels_ = 0;
-
-        // Audio buffers
-        std::vector<std::vector<float>> input_buffers_;
-        std::vector<std::vector<float>> output_buffers_;
-
-        // Performance monitoring
-        std::chrono::high_resolution_clock::time_point last_callback_time_;
-        std::atomic<int> callback_count_{ 0 };
-
     public:
         ASIOInterface();
-        ~ASIOInterface() override;
+        virtual ~ASIOInterface();
 
-        // AudioInterface implementation
-        bool initialize(int sample_rate = SAMPLE_RATE_96K,
-            int buffer_size = BUFFER_SIZE_ULTRA_LOW) override;
+        // AudioInterface implementation - matches your existing interface
+        bool initialize(int sample_rate = SAMPLE_RATE_96K, int buffer_size = BUFFER_SIZE_ULTRA_LOW) override;
         void shutdown() override;
         bool isInitialized() const override;
 
@@ -58,22 +48,68 @@ namespace Syntri {
 
         SimpleMetrics getMetrics() const override;
 
-    private:
         // ASIO-specific methods
+        std::vector<std::string> getAvailableDrivers() const;
+        bool loadDriver(const std::string& driver_name);
+        void unloadDriver();
+        std::string getCurrentDriverName() const { return current_driver_name_; }
+
+        // Hardware detection helper - returns HardwareType, not HardwareInfo
+        std::vector<HardwareType> detectHardwareTypes() const;
+
+    private:
+        // ASIO SDK integration
+#ifdef ENABLE_ASIO_SUPPORT
+        std::unique_ptr<AsioDrivers> asio_drivers_;
+#endif
+
+        // ASIO state
+        bool initialized_;
+        bool streaming_;
+        bool driver_loaded_;
+        std::string current_driver_name_;
+
+        // Audio configuration
+        int sample_rate_;
+        int buffer_size_;
+        int input_channels_;
+        int output_channels_;
+        int input_latency_;
+        int output_latency_;
+
+        // Processor callback
+        AudioProcessor* processor_;
+
+        // Performance monitoring
+        mutable std::chrono::high_resolution_clock::time_point last_callback_time_;
+        mutable long callback_count_;
+
+        // Audio buffers - using your MultiChannelBuffer type
+        MultiChannelBuffer input_buffers_;
+        MultiChannelBuffer output_buffers_;
+
+        // Hardware detection
+        HardwareType detected_type_;
+
+        // Internal methods
         bool initializeASIO();
         void cleanupASIO();
-        HardwareType detectHardwareType(const std::string& driver_name);
+        bool configureBuffers();
+        void releaseBuffers();
 
-        // Static ASIO callbacks
-        static void bufferSwitch(long doubleBufferIndex, long directProcess);
-        static void sampleRateDidChange(double sRate);
+        // ASIO callbacks (static functions for C interface)
+        static void bufferSwitch(long index, long processNow);
+        static void sampleRateChanged(double sRate);
         static long asioMessage(long selector, long value, void* message, double* opt);
+        static long bufferSwitchTimeInfo(void* params, long index, long processNow);
 
-        // Instance method for actual processing
-        void processAudioCallback(long bufferIndex);
+        // Internal callback handling
+        void handleBufferSwitch(long buffer_index);
+        void processAudioCallback(int frame_count);
+
+        // Helper methods
+        HardwareType detectHardwareType(const std::string& driver_name) const;
+        std::string getDriverDescription(const std::string& driver_name) const;
     };
-
-    // Factory function for ASIO interface
-    std::unique_ptr<ASIOInterface> createASIOInterface();
 
 } // namespace Syntri
