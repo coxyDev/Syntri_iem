@@ -1,5 +1,5 @@
-﻿# CMakeLists.txt - Simplified ASIO Approach (Header-Only)
-# Bypasses ASIO SDK compilation issues while preserving detection capability
+﻿# CMakeLists.txt - Complete Build System with Hardware Communication Test
+# Your working foundation + ASIO diagnostics + Hardware communication testing
 cmake_minimum_required(VERSION 3.20)
 project(Syntri VERSION 1.0.0 LANGUAGES CXX)
 
@@ -44,9 +44,9 @@ if(ENABLE_ASIO_SUPPORT)
     
     if(ASIO_SDK_AVAILABLE)
         message(STATUS "✅ ASIO SDK found at: ${ASIO_SDK_PATH}")
-        message(STATUS "   Using header-only approach (recommended)")
+        message(STATUS "   Using header-only approach")
     else()
-        message(STATUS "⚠️  ASIO SDK not found - using registry-based detection")
+        message(STATUS "ℹ️  ASIO SDK not found - using registry-based detection")
     endif()
 endif()
 
@@ -107,14 +107,14 @@ endif()
 # Build Configuration Summary
 # ====================================
 message(STATUS "====================================")
-message(STATUS "Syntri - Header-Only ASIO Approach")
+message(STATUS "Syntri Complete Audio System")
 message(STATUS "====================================")
 message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
 message(STATUS "ASIO Support: ${ENABLE_ASIO_SUPPORT}")
 if(ASIO_SDK_AVAILABLE)
-    message(STATUS "ASIO Method: Header-only (no SDK compilation)")
+    message(STATUS "ASIO Method: Header-only (working)")
 else()
     message(STATUS "ASIO Method: Registry-based detection")
 endif()
@@ -161,11 +161,16 @@ add_executable(comprehensive_test test/comprehensive_test.cpp)
 target_link_libraries(comprehensive_test SyntriCore)
 
 # ====================================
-# Header-Only ASIO Diagnostic - NO SDK COMPILATION
+# ASIO Diagnostic and Hardware Tests
 # ====================================
 if(WIN32)
+    # ASIO environment diagnostic
     add_executable(asio_diagnostic test/asio_diagnostic.cpp)
     target_link_libraries(asio_diagnostic ${PLATFORM_LIBS})
+    
+    # ASIO hardware communication test
+    add_executable(asio_hardware_test test/asio_hardware_test.cpp)
+    target_link_libraries(asio_hardware_test SyntriCore ${PLATFORM_LIBS})
     
     # Add ASIO headers for inclusion (no compilation)
     if(ASIO_SDK_AVAILABLE)
@@ -179,9 +184,18 @@ if(WIN32)
             PRIVATE
                 ASIO_SDK_AVAILABLE
         )
+        
+        target_include_directories(asio_hardware_test
+            PRIVATE
+                ${ASIO_SDK_PATH}/common
+                ${ASIO_SDK_PATH}/host
+        )
+        
+        target_compile_definitions(asio_hardware_test
+            PRIVATE
+                ASIO_SDK_AVAILABLE
+        )
     endif()
-    
-    # Note: NO ASIO source files added - header-only approach!
 endif()
 
 # ====================================
@@ -194,7 +208,7 @@ install(TARGETS SyntriCore basic_test interface_test comprehensive_test
 )
 
 if(WIN32)
-    install(TARGETS asio_diagnostic RUNTIME DESTINATION bin)
+    install(TARGETS asio_diagnostic asio_hardware_test RUNTIME DESTINATION bin)
 endif()
 
 install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
@@ -203,32 +217,37 @@ install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
 # Build Summary
 # ====================================
 message(STATUS "")
-message(STATUS "🎯 Build Summary:")
+message(STATUS "🎯 Complete Build Summary:")
 message(STATUS "   ✅ SyntriCore library (working)")
 message(STATUS "   ✅ basic_test executable (working)")
 message(STATUS "   ✅ interface_test executable (working)")  
 message(STATUS "   ✅ comprehensive_test executable (working)")
 if(WIN32)
-    message(STATUS "   🔍 asio_diagnostic tool (header-only, no compilation issues)")
+    message(STATUS "   🔍 asio_diagnostic tool (working)")
+    message(STATUS "   🎵 asio_hardware_test (NEW - tests real hardware)")
 endif()
 
 message(STATUS "")
 message(STATUS "📋 Build Instructions:")
-message(STATUS "   # Your working foundation")
-message(STATUS "   cmake .. -G \"Visual Studio 17 2022\" -A x64")
-message(STATUS "   cmake --build . --config Release")
-message(STATUS "")
-message(STATUS "   # Enable header-only ASIO detection")
+message(STATUS "   # Complete system with ASIO")
 message(STATUS "   cmake .. -G \"Visual Studio 17 2022\" -A x64 -DENABLE_ASIO_SUPPORT=ON")
 message(STATUS "   cmake --build . --config Release")
 message(STATUS "")
 message(STATUS "🧪 Test Instructions:")
-message(STATUS "   Release\\basic_test.exe")
-message(STATUS "   Release\\interface_test.exe")
-message(STATUS "   Release\\comprehensive_test.exe")
+message(STATUS "   Release\\basic_test.exe              # Foundation")
+message(STATUS "   Release\\interface_test.exe          # Interface layer")
+message(STATUS "   Release\\comprehensive_test.exe      # Complete system")
 if(WIN32)
-    message(STATUS "   Release\\asio_diagnostic.exe  # Header-only ASIO detection")
+    message(STATUS "   Release\\asio_diagnostic.exe         # ASIO environment")
+    message(STATUS "   Release\\asio_hardware_test.exe      # Hardware communication")
 endif()
 message(STATUS "")
-message(STATUS "✅ No more ASIO SDK compilation issues!")
+message(STATUS "🎵 ASIO Hardware Test:")
+message(STATUS "   Tests communication with your detected drivers:")
+message(STATUS "   - Yamaha Steinberg USB ASIO")
+message(STATUS "   - iConnectivity ASIO Driver") 
+message(STATUS "   - ASIO4ALL v2")
+message(STATUS "   - And validates professional latency capability")
+message(STATUS "")
+message(STATUS "🎉 Ready for professional audio development!")
 message(STATUS "")
