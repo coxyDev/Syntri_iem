@@ -2,7 +2,6 @@
 // FIXED Implementation - Properly working without ASIO conflicts
 // Preserves your foundation while preparing for ASIO when needed
 
-#define _USE_MATH_DEFINES
 #include <cmath>
 #include <algorithm>
 
