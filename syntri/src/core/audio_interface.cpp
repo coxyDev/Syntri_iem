@@ -1,17 +1,15 @@
 ﻿// src/core/audio_interface.cpp
-// Updated Audio Interface - Integrates ASIO while preserving working foundation
-// Your existing stub interface is preserved as the primary fallback
+// FIXED Implementation - Properly working without ASIO conflicts
+// Preserves your foundation while preparing for ASIO when needed
+
+#define _USE_MATH_DEFINES
+#include <cmath>
+#include <algorithm>
 
 #include "syntri/audio_interface.h"
 #include <iostream>
 #include <chrono>
 #include <thread>
-#include <cmath>
-
-// Only include ASIO interface if enabled
-#ifdef ENABLE_ASIO_SUPPORT
-#include "syntri/asio_interface.h"
-#endif
 
 namespace Syntri {
 
@@ -34,12 +32,12 @@ namespace Syntri {
             : initialized_(false), streaming_(false), sample_rate_(SAMPLE_RATE_96K),
             buffer_size_(BUFFER_SIZE_ULTRA_LOW), processor_(nullptr),
             hardware_type_(HardwareType::GENERIC_ASIO), callback_count_(0) {
-            std::cout << "🎵 Creating stub audio interface..." << std::endl;
+            std::cout << "Creating stub audio interface..." << std::endl;
             last_callback_time_ = std::chrono::high_resolution_clock::now();
         }
 
         ~StubAudioInterface() {
-            std::cout << "🔄 Destroying stub audio interface..." << std::endl;
+            std::cout << "Destroying stub audio interface..." << std::endl;
             if (streaming_) {
                 stopStreaming();
             }
@@ -49,26 +47,26 @@ namespace Syntri {
         }
 
         bool initialize(int sample_rate = SAMPLE_RATE_96K, int buffer_size = BUFFER_SIZE_ULTRA_LOW) override {
-            std::cout << "🚀 Initializing stub interface (SR: " << sample_rate
+            std::cout << "Initializing stub interface (SR: " << sample_rate
                 << " Hz, Buffer: " << buffer_size << ")" << std::endl;
 
             sample_rate_ = sample_rate;
             buffer_size_ = buffer_size;
             initialized_ = true;
 
-            std::cout << "✅ Stub interface initialized successfully" << std::endl;
+            std::cout << "Stub interface initialized successfully" << std::endl;
             return true;
         }
 
         void shutdown() override {
             if (!initialized_) return;
 
-            std::cout << "🔄 Shutting down stub interface..." << std::endl;
+            std::cout << "Shutting down stub interface..." << std::endl;
             if (streaming_) {
                 stopStreaming();
             }
             initialized_ = false;
-            std::cout << "✅ Stub interface shutdown complete" << std::endl;
+            std::cout << "Stub interface shutdown complete" << std::endl;
         }
 
         bool isInitialized() const override {
@@ -98,18 +96,18 @@ namespace Syntri {
 
         bool startStreaming(AudioProcessor* processor) override {
             if (!initialized_ || !processor) {
-                std::cout << "❌ Cannot start streaming - not initialized or no processor" << std::endl;
+                std::cout << "Cannot start streaming - not initialized or no processor" << std::endl;
                 return false;
             }
 
             processor_ = processor;
-            std::cout << "▶️  Starting stub streaming..." << std::endl;
+            std::cout << "Starting stub streaming..." << std::endl;
 
             // Notify processor of setup
             processor_->setupChanged(sample_rate_, buffer_size_);
 
             streaming_ = true;
-            std::cout << "✅ Stub streaming started successfully" << std::endl;
+            std::cout << "Stub streaming started successfully" << std::endl;
 
             return true;
         }
@@ -117,10 +115,10 @@ namespace Syntri {
         void stopStreaming() override {
             if (!streaming_) return;
 
-            std::cout << "⏹️  Stopping stub streaming..." << std::endl;
+            std::cout << "Stopping stub streaming..." << std::endl;
             streaming_ = false;
             processor_ = nullptr;
-            std::cout << "✅ Stub streaming stopped" << std::endl;
+            std::cout << "Stub streaming stopped" << std::endl;
         }
 
         bool isStreaming() const override {
@@ -149,7 +147,7 @@ namespace Syntri {
     public:
         TestAudioProcessor(bool generate_tone = false)
             : generate_tone_(generate_tone), phase_(0.0), frequency_(440.0), sample_rate_(SAMPLE_RATE_96K) {
-            std::cout << "🎵 Creating test audio processor (tone: " << (generate_tone ? "ON" : "OFF") << ")" << std::endl;
+            std::cout << "Creating test audio processor (tone: " << (generate_tone ? "ON" : "OFF") << ")" << std::endl;
         }
 
         void processAudio(
@@ -165,7 +163,7 @@ namespace Syntri {
             }
 
             if (generate_tone_) {
-                // Generate test tone
+                // Generate test tone using M_PI (now properly defined)
                 double phase_increment = 2.0 * M_PI * frequency_ / sample_rate_;
 
                 for (int sample = 0; sample < num_samples; ++sample) {
@@ -204,50 +202,25 @@ namespace Syntri {
 
         void setupChanged(int sample_rate, int buffer_size) override {
             sample_rate_ = sample_rate;
-            std::cout << "🔧 Test processor setup changed (SR: " << sample_rate
+            std::cout << "Test processor setup changed (SR: " << sample_rate
                 << " Hz, Buffer: " << buffer_size << ")" << std::endl;
         }
     };
 
     // ====================================
-    // Factory Functions - Updated with ASIO Support
+    // Factory Functions - Simplified and Working
     // ====================================
     std::unique_ptr<AudioInterface> createAudioInterface(HardwareType type) {
-        std::cout << "🏭 Creating audio interface for: " << hardwareTypeToString(type) << std::endl;
+        std::cout << "Creating audio interface for: " << hardwareTypeToString(type) << std::endl;
 
-#ifdef ENABLE_ASIO_SUPPORT
-        // Try ASIO first for hardware types that support it
-        switch (type) {
-        case HardwareType::UAD_APOLLO_X16:
-            return ASIO::createApolloInterface();
-        case HardwareType::UAD_APOLLO_X8:
-            return ASIO::createApolloInterface();
-        case HardwareType::ALLEN_HEATH_AVANTIS:
-            return ASIO::createAvantisInterface();
-        case HardwareType::DIGICO_SD9:
-            return ASIO::createASIOInterface();
-        case HardwareType::YAMAHA_CL5:
-            return ASIO::createASIOInterface();
-        case HardwareType::BEHRINGER_X32:
-            return ASIO::createX32Interface();
-        case HardwareType::FOCUSRITE_SCARLETT:
-            return ASIO::createScarlettInterface();
-        case HardwareType::RME_BABYFACE:
-            return ASIO::createBabyfaceInterface();
-        case HardwareType::GENERIC_ASIO:
-            return ASIO::createASIOInterface();
-        default:
-            break;
-        }
-#endif
-
-        // Fallback to stub interface (your working foundation)
-        std::cout << "🔄 Falling back to stub interface" << std::endl;
+        // For now, always return stub interface
+        // TODO: Add ASIO integration when properly implemented
+        std::cout << "Using stub interface (ASIO integration pending)" << std::endl;
         return std::make_unique<StubAudioInterface>();
     }
 
     std::unique_ptr<AudioInterface> createStubInterface() {
-        std::cout << "🏭 Creating stub interface directly" << std::endl;
+        std::cout << "Creating stub interface directly" << std::endl;
         return std::make_unique<StubAudioInterface>();
     }
 
@@ -256,34 +229,19 @@ namespace Syntri {
     }
 
     // ====================================
-    // Hardware Detection - Enhanced with ASIO
+    // Hardware Detection - Simplified for Now
     // ====================================
     std::vector<HardwareType> detectAvailableHardware() {
         std::vector<HardwareType> detected;
 
-        std::cout << "🔍 Detecting available audio hardware..." << std::endl;
+        std::cout << "Detecting available audio hardware..." << std::endl;
 
-#ifdef ENABLE_ASIO_SUPPORT
-        // Check for ASIO hardware
-        if (ASIO::ASIOInterface::detectASIOHardware()) {
-            std::cout << "✅ ASIO hardware detected" << std::endl;
-            auto asio_hardware = ASIO::ASIOInterface::getDetectedHardware();
-            detected.insert(detected.end(), asio_hardware.begin(), asio_hardware.end());
-        }
-        else {
-            std::cout << "ℹ️  No ASIO hardware detected" << std::endl;
-        }
-#else
-        std::cout << "ℹ️  ASIO support not compiled in" << std::endl;
-#endif
+        // For now, just return generic interface
+        // TODO: Add real ASIO detection when properly implemented
+        detected.push_back(HardwareType::GENERIC_ASIO);
+        std::cout << "Generic interface available" << std::endl;
 
-        // Always include generic interface as fallback
-        if (detected.empty()) {
-            detected.push_back(HardwareType::GENERIC_ASIO);
-            std::cout << "🔄 No specific hardware detected - using generic interface" << std::endl;
-        }
-
-        std::cout << "📊 Detection complete. Found " << detected.size() << " interface(s):" << std::endl;
+        std::cout << "Detection complete. Found " << detected.size() << " interface(s):" << std::endl;
         for (const auto& hw : detected) {
             std::cout << "   - " << hardwareTypeToString(hw) << std::endl;
         }
@@ -315,71 +273,71 @@ namespace Syntri {
             interface->shutdown();
         }
         else {
-            std::cout << "❌ Failed to initialize interface for detailed info" << std::endl;
+            std::cout << "Failed to initialize interface for detailed info" << std::endl;
         }
         std::cout << "=====================================" << std::endl;
     }
 
     bool runBasicHardwareTest() {
         std::cout << "=====================================" << std::endl;
-        std::cout << "🧪 Running Basic Hardware Test" << std::endl;
+        std::cout << "Running Basic Hardware Test" << std::endl;
         std::cout << "=====================================" << std::endl;
 
         // Test hardware detection
         auto detected = detectAvailableHardware();
         if (detected.empty()) {
-            std::cout << "❌ No hardware detected" << std::endl;
+            std::cout << "No hardware detected" << std::endl;
             return false;
         }
 
         // Test each detected hardware type
         bool all_passed = true;
         for (const auto& hw_type : detected) {
-            std::cout << "\n🔧 Testing: " << hardwareTypeToString(hw_type) << std::endl;
+            std::cout << "\nTesting: " << hardwareTypeToString(hw_type) << std::endl;
 
             auto interface = createAudioInterface(hw_type);
             if (!interface) {
-                std::cout << "❌ Failed to create interface" << std::endl;
+                std::cout << "Failed to create interface" << std::endl;
                 all_passed = false;
                 continue;
             }
 
             // Test initialization
             if (!interface->initialize()) {
-                std::cout << "❌ Failed to initialize interface" << std::endl;
+                std::cout << "Failed to initialize interface" << std::endl;
                 all_passed = false;
                 continue;
             }
 
-            std::cout << "✅ Interface initialized successfully" << std::endl;
+            std::cout << "Interface initialized successfully" << std::endl;
             std::cout << "   Latency: " << interface->getCurrentLatency() << " ms" << std::endl;
 
             // Test streaming setup
             auto processor = createTestProcessor(false);
             if (interface->startStreaming(processor.get())) {
-                std::cout << "✅ Streaming started successfully" << std::endl;
+                std::cout << "Streaming started successfully" << std::endl;
 
                 // Simulate brief operation
                 std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
                 interface->stopStreaming();
-                std::cout << "✅ Streaming stopped successfully" << std::endl;
+                std::cout << "Streaming stopped successfully" << std::endl;
             }
             else {
-                std::cout << "⚠️  Streaming test failed (non-critical)" << std::endl;
+                std::cout << "Streaming test failed (non-critical)" << std::endl;
             }
 
             interface->shutdown();
-            std::cout << "✅ Interface shutdown successfully" << std::endl;
+            std::cout << "Interface shutdown successfully" << std::endl;
         }
 
         std::cout << "\n=====================================" << std::endl;
         if (all_passed) {
-            std::cout << "🎉 ALL HARDWARE TESTS PASSED! 🎉" << std::endl;
-            std::cout << "Your audio system is ready for Phase 1!" << std::endl;
+            std::cout << "ALL TESTS PASSED!" << std::endl;
+            std::cout << "Your audio foundation is working correctly!" << std::endl;
         }
         else {
-            std::cout << "⚠️  Some tests failed, but basic functionality works" << std::endl;
+            std::cout << "Some tests failed, but basic functionality works" << std::endl;
             std::cout << "System can proceed with available interfaces" << std::endl;
         }
         std::cout << "=====================================" << std::endl;
