@@ -1,5 +1,5 @@
 // include/syntri/audio_interface.h
-// Updated to include all needed declarations for ASIO integration
+// Fixed version with clean type definitions and proper inheritance
 #pragma once
 
 #include "syntri/types.h"
@@ -25,7 +25,7 @@ namespace Syntri {
         virtual void setupChanged(int sample_rate, int buffer_size) = 0;
     };
 
-    // Hardware abstraction interface - keeps it simple for Phase 1
+    // Hardware abstraction interface - clean and simple
     class AudioInterface {
     public:
         virtual ~AudioInterface() = default;
@@ -51,9 +51,6 @@ namespace Syntri {
         virtual SimpleMetrics getMetrics() const = 0;
     };
 
-    // Forward declarations for implementation classes
-    class StubAudioInterface;
-
     // Factory functions for creating hardware interfaces
     std::unique_ptr<AudioInterface> createAudioInterface(HardwareType type);
     std::unique_ptr<AudioInterface> createStubInterface();
@@ -61,7 +58,7 @@ namespace Syntri {
     // Audio processor factory
     std::unique_ptr<AudioProcessor> createTestProcessor(bool generate_tone = false);
 
-    // Hardware detection - returns HardwareType enum (not HardwareInfo struct)
+    // Hardware detection - returns HardwareType enum
     std::vector<HardwareType> detectAvailableHardware();
 
     // Utility functions

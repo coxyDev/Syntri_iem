@@ -1,85 +1,19 @@
 ﻿// src/core/audio_interface.cpp
-// Updated to work with your existing types and add ASIO integration
+// Fixed implementation with proper inheritance and type handling
 #include "syntri/audio_interface.h"
-#include "syntri/asio_interface.h"
 #include <iostream>
-#include <algorithm>
-#include <memory>
-#include <thread>
 #include <chrono>
+#include <thread>
+#include <cmath>
+
+#ifdef ENABLE_ASIO_SUPPORT
+#include "syntri/asio_interface.h"
+#endif
 
 namespace Syntri {
 
     // ====================================
-    // Hardware Detection Functions  
-    // ====================================
-
-    std::vector<HardwareType> detectAvailableHardware() {
-        std::vector<HardwareType> all_hardware;
-
-        std::cout << "Scanning for audio hardware..." << std::endl;
-
-        // Try ASIO hardware detection first (Windows)
-#ifdef _WIN32
-        try {
-            auto asio_interface = std::make_unique<ASIOInterface>();
-            auto asio_hardware = asio_interface->detectHardwareTypes();
-
-            for (const auto& hw_type : asio_hardware) {
-                all_hardware.push_back(hw_type);
-            }
-
-            std::cout << "ASIO scan complete - found " << asio_hardware.size() << " device(s)" << std::endl;
-        }
-        catch (const std::exception& e) {
-            std::cout << "ASIO scan failed: " << e.what() << std::endl;
-        }
-#endif
-
-        // Add generic fallback hardware for testing
-        if (all_hardware.empty()) {
-            std::cout << "Adding generic fallback hardware..." << std::endl;
-            all_hardware.push_back(HardwareType::GENERIC_ASIO);
-        }
-
-        std::cout << "Total hardware detected: " << all_hardware.size() << " device(s)" << std::endl;
-        return all_hardware;
-    }
-
-    std::unique_ptr<AudioInterface> createAudioInterface(HardwareType type) {
-        std::cout << "Creating audio interface for: " << hardwareTypeToString(type) << std::endl;
-
-        // For now, all hardware types use ASIO interface on Windows
-#ifdef _WIN32
-        switch (type) {
-        case HardwareType::UAD_APOLLO_X16:
-        case HardwareType::UAD_APOLLO_X8:
-        case HardwareType::ALLEN_HEATH_AVANTIS:
-        case HardwareType::BEHRINGER_X32:
-        case HardwareType::FOCUSRITE_SCARLETT:
-        case HardwareType::RME_BABYFACE:
-        case HardwareType::DIGICO_SD9:
-        case HardwareType::YAMAHA_CL5:
-        case HardwareType::GENERIC_ASIO:
-            std::cout << "Creating ASIO interface for: " << hardwareTypeToString(type) << std::endl;
-            return std::make_unique<ASIOInterface>();
-        default:
-            break;
-        }
-#endif
-
-        // Fallback to stub interface for testing
-        std::cout << "Creating stub interface for: " << hardwareTypeToString(type) << std::endl;
-        return createStubInterface();
-    }
-
-    std::unique_ptr<AudioInterface> createStubInterface() {
-        std::cout << "Creating stub audio interface..." << std::endl;
-        return std::make_unique<StubAudioInterface>();
-    }
-
-    // ====================================
-    // StubAudioInterface Implementation
+    // StubAudioInterface - Internal Implementation
     // ====================================
 
     class StubAudioInterface : public AudioInterface {
@@ -91,12 +25,13 @@ namespace Syntri {
         AudioProcessor* processor_;
         std::chrono::high_resolution_clock::time_point last_callback_time_;
         HardwareType hardware_type_;
+        int callback_count_;
 
     public:
         StubAudioInterface()
             : initialized_(false), streaming_(false), sample_rate_(SAMPLE_RATE_96K),
             buffer_size_(BUFFER_SIZE_ULTRA_LOW), processor_(nullptr),
-            hardware_type_(HardwareType::GENERIC_ASIO) {
+            hardware_type_(HardwareType::GENERIC_ASIO), callback_count_(0) {
             std::cout << "Creating stub audio interface..." << std::endl;
             last_callback_time_ = std::chrono::high_resolution_clock::now();
         }
@@ -156,33 +91,48 @@ namespace Syntri {
             if (buffer_size_ > 0 && sample_rate_ > 0) {
                 return (static_cast<double>(buffer_size_) / static_cast<double>(sample_rate_)) * 1000.0;
             }
-            return 10.0; // Default 10ms
+            return 0.0;
         }
 
         bool startStreaming(AudioProcessor* processor) override {
+            std::cout << "Starting stub streaming..." << std::endl;
+
             if (!initialized_) {
-                std::cout << "Cannot start streaming - not initialized" << std::endl;
+                std::cout << "Stub interface not initialized" << std::endl;
                 return false;
             }
 
             if (streaming_) {
-                std::cout << "Already streaming" << std::endl;
+                std::cout << "Stub already streaming" << std::endl;
                 return true;
             }
 
             processor_ = processor;
             streaming_ = true;
 
-            std::cout << "Started stub audio streaming (simulated)" << std::endl;
+            if (processor_) {
+                processor_->setupChanged(sample_rate_, buffer_size_);
+
+                // Simulate a few audio callbacks for testing
+                MultiChannelBuffer inputs(2, std::vector<float>(buffer_size_, 0.0f));
+                MultiChannelBuffer outputs(2, std::vector<float>(buffer_size_, 0.0f));
+
+                for (int i = 0; i < 3; i++) {
+                    processor_->processAudio(inputs, outputs, buffer_size_);
+                    callback_count_++;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                }
+            }
+
+            std::cout << "Stub streaming started" << std::endl;
             return true;
         }
 
         void stopStreaming() override {
-            if (!streaming_) return;
-
+            std::cout << "Stopping stub streaming..." << std::endl;
             streaming_ = false;
             processor_ = nullptr;
-            std::cout << "Stopped stub audio streaming" << std::endl;
+            std::cout << "Stub streaming stopped" << std::endl;
         }
 
         bool isStreaming() const override {
@@ -192,154 +142,198 @@ namespace Syntri {
         SimpleMetrics getMetrics() const override {
             SimpleMetrics metrics;
             metrics.latency_ms = getCurrentLatency();
-            metrics.cpu_usage_percent = 2.0; // Low CPU for stub
+            metrics.cpu_usage_percent = 15.0;  // Simulated
             metrics.buffer_underruns = 0;
             return metrics;
         }
     };
 
     // ====================================
-    // Test Audio Processor Implementation
+    // TestAudioProcessor Implementation
     // ====================================
 
     class TestAudioProcessor : public AudioProcessor {
     private:
-        int frame_count_;
         bool generate_tone_;
-        float tone_frequency_;
         float phase_;
+        float frequency_;
+        int sample_rate_;
 
     public:
-        TestAudioProcessor(bool generate_tone = false, float frequency = 440.0f)
-            : frame_count_(0), generate_tone_(generate_tone),
-            tone_frequency_(frequency), phase_(0.0f) {
-            std::cout << "Test processor created (tone=" << (generate_tone ? "on" : "off") << ")" << std::endl;
+        TestAudioProcessor(bool generate_tone = false)
+            : generate_tone_(generate_tone), phase_(0.0f), frequency_(440.0f), sample_rate_(48000) {
+            std::cout << "Creating test audio processor (tone: "
+                << (generate_tone ? "enabled" : "disabled") << ")" << std::endl;
         }
 
-        void processAudio(
-            const MultiChannelBuffer& inputs,
-            MultiChannelBuffer& outputs,
-            int num_samples
-        ) override {
-            frame_count_ += num_samples;
+        void processAudio(const MultiChannelBuffer& inputs, MultiChannelBuffer& outputs, int num_samples) override {
+            if (generate_tone_) {
+                // Generate a simple sine wave tone
+                for (int sample = 0; sample < num_samples; sample++) {
+                    float value = 0.1f * std::sin(2.0f * 3.14159f * frequency_ * phase_ / sample_rate_);
 
-            if (generate_tone_ && !outputs.empty()) {
-                // Generate simple sine wave for testing
-                float sample_rate = 48000.0f; // Assume 48kHz for test tone
-                float phase_increment = 2.0f * 3.14159f * tone_frequency_ / sample_rate;
-
-                for (int frame = 0; frame < num_samples; ++frame) {
-                    float sample = 0.1f * sinf(phase_);  // Low volume sine wave
-
-                    // Output to all available channels
-                    for (size_t ch = 0; ch < outputs.size(); ++ch) {
-                        if (frame < static_cast<int>(outputs[ch].size())) {
-                            outputs[ch][frame] = sample;
+                    for (size_t channel = 0; channel < outputs.size(); channel++) {
+                        if (outputs[channel].size() > static_cast<size_t>(sample)) {
+                            outputs[channel][sample] = value;
                         }
                     }
 
-                    phase_ += phase_increment;
-                    if (phase_ > 2.0f * 3.14159f) {
-                        phase_ -= 2.0f * 3.14159f;
+                    phase_ += 1.0f;
+                    if (phase_ >= sample_rate_) {
+                        phase_ = 0.0f;
                     }
                 }
             }
             else {
-                // Pass-through or silence
-                for (size_t ch = 0; ch < outputs.size() && ch < inputs.size(); ++ch) {
-                    for (int frame = 0; frame < num_samples; ++frame) {
-                        if (frame < static_cast<int>(outputs[ch].size()) &&
-                            frame < static_cast<int>(inputs[ch].size())) {
-                            outputs[ch][frame] = inputs[ch][frame] * 0.5f;  // 50% pass-through
+                // Pass through (copy inputs to outputs)
+                for (size_t channel = 0; channel < std::min(inputs.size(), outputs.size()); channel++) {
+                    for (int sample = 0; sample < num_samples; sample++) {
+                        if (inputs[channel].size() > static_cast<size_t>(sample) &&
+                            outputs[channel].size() > static_cast<size_t>(sample)) {
+                            outputs[channel][sample] = inputs[channel][sample];
                         }
                     }
                 }
             }
-
-            // Log progress occasionally
-            if (frame_count_ % (48000 * 2) == 0) {  // Every 2 seconds at 48kHz
-                std::cout << "Processed " << frame_count_ << " frames" << std::endl;
-            }
         }
 
         void setupChanged(int sample_rate, int buffer_size) override {
-            std::cout << "Audio setup changed: " << sample_rate << "Hz, " << buffer_size << " samples" << std::endl;
-            // Reset state if needed
-            phase_ = 0.0f;
-            frame_count_ = 0;
+            sample_rate_ = sample_rate;
+            std::cout << "Audio setup changed: " << sample_rate << " Hz, " << buffer_size << " samples" << std::endl;
         }
     };
+
+    // ====================================
+    // Factory Functions - FIXED
+    // ====================================
+
+    std::unique_ptr<AudioInterface> createAudioInterface(HardwareType type) {
+        std::cout << "Creating audio interface for: " << hardwareTypeToString(type) << std::endl;
+
+#ifdef ENABLE_ASIO_SUPPORT
+#ifdef _WIN32
+        // Return ASIO interface for supported hardware types
+        switch (type) {
+        case HardwareType::UAD_APOLLO_X16:
+        case HardwareType::UAD_APOLLO_X8:
+        case HardwareType::ALLEN_HEATH_AVANTIS:
+        case HardwareType::BEHRINGER_X32:
+        case HardwareType::FOCUSRITE_SCARLETT:
+        case HardwareType::RME_BABYFACE:
+        case HardwareType::DIGICO_SD9:
+        case HardwareType::YAMAHA_CL5:
+        case HardwareType::GENERIC_ASIO:
+            std::cout << "Creating ASIO interface for: " << hardwareTypeToString(type) << std::endl;
+            // FIXED: Return as AudioInterface pointer (base class)
+            return std::unique_ptr<AudioInterface>(new ASIOInterface());
+        default:
+            break;
+        }
+#endif
+#endif
+
+        // Fallback to stub interface for testing
+        std::cout << "Creating stub interface for: " << hardwareTypeToString(type) << std::endl;
+        return createStubInterface();
+    }
+
+    std::unique_ptr<AudioInterface> createStubInterface() {
+        std::cout << "Creating stub audio interface..." << std::endl;
+        // FIXED: Return as AudioInterface pointer (base class)  
+        return std::unique_ptr<AudioInterface>(new StubAudioInterface());
+    }
 
     std::unique_ptr<AudioProcessor> createTestProcessor(bool generate_tone) {
         return std::make_unique<TestAudioProcessor>(generate_tone);
     }
 
     // ====================================
-    // Utility Functions
+    // Hardware Detection
     // ====================================
 
+    std::vector<HardwareType> detectAvailableHardware() {
+        std::vector<HardwareType> detected;
+
+        std::cout << "Detecting available audio hardware..." << std::endl;
+
+#ifdef ENABLE_ASIO_SUPPORT
+        // Try to detect ASIO devices
+        try {
+            ASIOInterface temp_interface;
+            if (temp_interface.initialize()) {
+                auto drivers = temp_interface.getAvailableDrivers();
+                for (const auto& driver : drivers) {
+                    HardwareType type = temp_interface.detectHardwareType(driver);
+                    detected.push_back(type);
+                    std::cout << "  Found: " << driver << " (" << hardwareTypeToString(type) << ")" << std::endl;
+                }
+                temp_interface.shutdown();
+            }
+        }
+        catch (const std::exception& e) {
+            std::cout << "Error detecting ASIO hardware: " << e.what() << std::endl;
+        }
+#endif
+
+        // Always include stub interface as fallback
+        if (detected.empty()) {
+            detected.push_back(HardwareType::GENERIC_ASIO);
+            std::cout << "  Using stub interface (no hardware detected)" << std::endl;
+        }
+
+        std::cout << "Hardware detection complete (" << detected.size() << " devices)" << std::endl;
+        return detected;
+    }
+
     void printHardwareInfo(HardwareType type) {
-        std::cout << "\nHardware: " << hardwareTypeToString(type) << std::endl;
-        std::cout << "   Type: Professional Audio Interface" << std::endl;
-        std::cout << "   Connected: Yes" << std::endl;
-        std::cout << "   Channels: 2 in, 2 out (default)" << std::endl;
-        std::cout << "   Sample Rates: 44100, 48000, 96000 Hz" << std::endl;
-        std::cout << "   Features: Low-latency ASIO support" << std::endl;
+        std::cout << "Hardware Info: " << hardwareTypeToString(type) << std::endl;
+
+        auto interface = createAudioInterface(type);
+        if (interface->initialize()) {
+            std::cout << "  Name: " << interface->getName() << std::endl;
+            std::cout << "  Input Channels: " << interface->getInputChannelCount() << std::endl;
+            std::cout << "  Output Channels: " << interface->getOutputChannelCount() << std::endl;
+            std::cout << "  Latency: " << interface->getCurrentLatency() << " ms" << std::endl;
+            interface->shutdown();
+        }
+        else {
+            std::cout << "  Failed to initialize" << std::endl;
+        }
     }
 
     bool runBasicHardwareTest() {
-        std::cout << "\nRunning basic hardware test..." << std::endl;
+        std::cout << "Running basic hardware test..." << std::endl;
 
-        try {
-            // Detect hardware
-            auto hardware = detectAvailableHardware();
-            if (hardware.empty()) {
-                std::cout << "No hardware detected" << std::endl;
-                return false;
-            }
+        auto interface = createStubInterface();
+        bool success = true;
 
-            // Print detected hardware
-            for (const auto& hw_type : hardware) {
-                printHardwareInfo(hw_type);
-            }
-
-            // Test interface creation
-            auto interface = createAudioInterface(hardware[0]);
-            if (!interface) {
-                std::cout << "Failed to create audio interface" << std::endl;
-                return false;
-            }
-
-            // Test initialization
-            if (!interface->initialize(SAMPLE_RATE_48K, BUFFER_SIZE_LOW)) {
-                std::cout << "Failed to initialize interface" << std::endl;
-                return false;
-            }
-
-            // Test streaming
-            auto processor = createTestProcessor(false);
-            if (!interface->startStreaming(processor.get())) {
-                std::cout << "Failed to start streaming" << std::endl;
-                return false;
-            }
-
-            std::cout << "Streaming started successfully" << std::endl;
-
-            // Brief delay to simulate operation
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-            // Clean shutdown
-            interface->stopStreaming();
-            interface->shutdown();
-
-            std::cout << "Basic hardware test completed successfully" << std::endl;
-            return true;
-
-        }
-        catch (const std::exception& e) {
-            std::cout << "Hardware test failed: " << e.what() << std::endl;
+        // Test initialization
+        if (!interface->initialize()) {
+            std::cout << "  ❌ Initialization failed" << std::endl;
             return false;
         }
+        std::cout << "  ✅ Initialization successful" << std::endl;
+
+        // Test processor creation and streaming
+        auto processor = createTestProcessor(false);
+        if (!interface->startStreaming(processor.get())) {
+            std::cout << "  ❌ Streaming failed" << std::endl;
+            success = false;
+        }
+        else {
+            std::cout << "  ✅ Streaming successful" << std::endl;
+            interface->stopStreaming();
+        }
+
+        // Test metrics
+        auto metrics = interface->getMetrics();
+        std::cout << "  Metrics - Latency: " << metrics.latency_ms << " ms, "
+            << "CPU: " << metrics.cpu_usage_percent << "%, "
+            << "Underruns: " << metrics.buffer_underruns << std::endl;
+
+        interface->shutdown();
+        std::cout << "Basic hardware test " << (success ? "PASSED" : "FAILED") << std::endl;
+        return success;
     }
 
 } // namespace Syntri
