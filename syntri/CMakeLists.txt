@@ -1,253 +1,135 @@
-﻿# CMakeLists.txt - Complete Build System with Hardware Communication Test
-# Your working foundation + ASIO diagnostics + Hardware communication testing
+﻿# CMakeLists.txt - Clean Build System
+# Fixed version that builds successfully without ASIO SDK complications
 cmake_minimum_required(VERSION 3.20)
 project(Syntri VERSION 1.0.0 LANGUAGES CXX)
 
-# ====================================
-# Build Configuration  
-# ====================================
+# =====================
+# COMPILER SETTINGS
+# =====================
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Default to Release for performance
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
-
-# ====================================
-# ASIO SDK Detection (Header-Only)
-# ====================================
-option(ENABLE_ASIO_SUPPORT "Enable ASIO hardware support" OFF)
-
-set(ASIO_SDK_AVAILABLE FALSE)
-set(ASIO_SDK_PATH "")
-
-if(ENABLE_ASIO_SUPPORT)
-    # Common ASIO SDK locations
-    set(ASIO_SEARCH_PATHS
-        "C:/asiosdk_2.3.3"
-        "C:/Program Files/ASIO SDK/2.3.3"
-        "C:/SDK/ASIO/2.3.3"
-        "${CMAKE_SOURCE_DIR}/../asiosdk_2.3.3"
-        "${CMAKE_SOURCE_DIR}/third_party/asiosdk_2.3.3"
-        "$ENV{ASIO_SDK_PATH}"
-    )
-    
-    foreach(path ${ASIO_SEARCH_PATHS})
-        if(EXISTS "${path}/common/asio.h")
-            set(ASIO_SDK_PATH "${path}")
-            set(ASIO_SDK_AVAILABLE TRUE)
-            break()
-        endif()
-    endforeach()
-    
-    if(ASIO_SDK_AVAILABLE)
-        message(STATUS "✅ ASIO SDK found at: ${ASIO_SDK_PATH}")
-        message(STATUS "   Using header-only approach")
-    else()
-        message(STATUS "ℹ️  ASIO SDK not found - using registry-based detection")
-    endif()
-endif()
-
-# ====================================
-# Compiler Settings
-# ====================================
-if(MSVC)
-    add_compile_options(/W4 /permissive-)
-    add_compile_definitions(
-        WIN32_LEAN_AND_MEAN
-        NOMINMAX
-        _CRT_SECURE_NO_WARNINGS
-        _USE_MATH_DEFINES
-    )
-    
-    if(CMAKE_BUILD_TYPE MATCHES Release)
-        add_compile_options(/O2 /Ob2 /DNDEBUG)
-    endif()
-    
-    add_compile_options(/utf-8)
-    
-else()
-    add_compile_options(-Wall -Wextra -Wpedantic)
-    add_compile_definitions(_USE_MATH_DEFINES)
-    if(CMAKE_BUILD_TYPE MATCHES Release)
-        add_compile_options(-O3 -DNDEBUG)
-    endif()
-endif()
-
-# ====================================
-# Platform-Specific Libraries
-# ====================================
+# Windows-specific settings for clean compilation
 if(WIN32)
-    set(PLATFORM_LIBS 
-        winmm
-        ole32
-        oleaut32
-        advapi32
-        kernel32
-        user32
-    )
-elseif(APPLE)
-    find_library(COREAUDIO_FRAMEWORK CoreAudio)
-    find_library(AUDIOTOOLBOX_FRAMEWORK AudioToolbox)
-    find_library(AUDIOUNIT_FRAMEWORK AudioUnit)
-    set(PLATFORM_LIBS 
-        ${COREAUDIO_FRAMEWORK}
-        ${AUDIOTOOLBOX_FRAMEWORK}
-        ${AUDIOUNIT_FRAMEWORK}
-    )
-elseif(UNIX)
-    find_package(PkgConfig REQUIRED)
-    pkg_check_modules(ALSA REQUIRED alsa)
-    set(PLATFORM_LIBS ${ALSA_LIBRARIES})
+    add_definitions(-D_WIN32_WINNT=0x0601)  # Windows 7+
+    add_definitions(-DWINVER=0x0601)
+    add_definitions(-DNOMINMAX)  # Prevent Windows.h min/max conflicts
 endif()
 
-# ====================================
-# Build Configuration Summary
-# ====================================
-message(STATUS "====================================")
-message(STATUS "Syntri Complete Audio System")
-message(STATUS "====================================")
-message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
-message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
-message(STATUS "ASIO Support: ${ENABLE_ASIO_SUPPORT}")
-if(ASIO_SDK_AVAILABLE)
-    message(STATUS "ASIO Method: Header-only (working)")
-else()
-    message(STATUS "ASIO Method: Registry-based detection")
-endif()
-message(STATUS "====================================")
+# =====================
+# DIRECTORY STRUCTURE
+# =====================
+set(SYNTRI_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
+set(SYNTRI_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+set(SYNTRI_TEST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/test")
 
-# ====================================
-# Core Library Sources - YOUR WORKING FOUNDATION
-# ====================================
+# =====================
+# SYNTRI CORE LIBRARY
+# =====================
+set(SYNTRI_CORE_HEADERS
+    "${SYNTRI_INCLUDE_DIR}/syntri/types.h"
+    "${SYNTRI_INCLUDE_DIR}/syntri/audio_interface.h"
+)
+
 set(SYNTRI_CORE_SOURCES
-    src/core/audio_interface.cpp
+    "${SYNTRI_SRC_DIR}/core/audio_interface.cpp"
 )
 
-# ====================================
-# SyntriCore Library - WORKING PERFECTLY
-# ====================================
-add_library(SyntriCore ${SYNTRI_CORE_SOURCES})
-
-target_include_directories(SyntriCore
-    PUBLIC
-        include
-    PRIVATE
-        src
+# Create the core library
+add_library(SyntriCore STATIC
+    ${SYNTRI_CORE_HEADERS}
+    ${SYNTRI_CORE_SOURCES}
 )
 
-target_link_libraries(SyntriCore
-    PRIVATE
-        ${PLATFORM_LIBS}
+target_include_directories(SyntriCore PUBLIC
+    ${SYNTRI_INCLUDE_DIR}
 )
 
-# ====================================
-# Test Executables - ALL WORKING
-# ====================================
+# Platform-specific libraries
+if(WIN32)
+    target_link_libraries(SyntriCore 
+        ole32      # For COM
+        advapi32   # For Registry
+    )
+endif()
 
-# Basic foundation test
-add_executable(basic_test test/basic_test.cpp)
+# =====================
+# TEST EXECUTABLES
+# =====================
+
+# Basic Foundation Test
+add_executable(basic_test "${SYNTRI_TEST_DIR}/basic_test.cpp")
 target_link_libraries(basic_test SyntriCore)
 
-# Interface layer test
-add_executable(interface_test test/interface_test.cpp)
+# Interface Layer Test  
+add_executable(interface_test "${SYNTRI_TEST_DIR}/interface_test.cpp")
 target_link_libraries(interface_test SyntriCore)
 
-# Comprehensive system test
-add_executable(comprehensive_test test/comprehensive_test.cpp)
+# Comprehensive Test
+add_executable(comprehensive_test "${SYNTRI_TEST_DIR}/comprehensive_test.cpp")
 target_link_libraries(comprehensive_test SyntriCore)
 
-# ====================================
-# ASIO Diagnostic and Hardware Tests
-# ====================================
-if(WIN32)
-    # ASIO environment diagnostic
-    add_executable(asio_diagnostic test/asio_diagnostic.cpp)
-    target_link_libraries(asio_diagnostic ${PLATFORM_LIBS})
-    
-    # ASIO hardware communication test
-    add_executable(asio_hardware_test test/asio_hardware_test.cpp)
-    target_link_libraries(asio_hardware_test SyntriCore ${PLATFORM_LIBS})
-    
-    # Add ASIO headers for inclusion (no compilation)
-    if(ASIO_SDK_AVAILABLE)
-        target_include_directories(asio_diagnostic
-            PRIVATE
-                ${ASIO_SDK_PATH}/common
-                ${ASIO_SDK_PATH}/host
-        )
-        
-        target_compile_definitions(asio_diagnostic
-            PRIVATE
-                ASIO_SDK_AVAILABLE
-        )
-        
-        target_include_directories(asio_hardware_test
-            PRIVATE
-                ${ASIO_SDK_PATH}/common
-                ${ASIO_SDK_PATH}/host
-        )
-        
-        target_compile_definitions(asio_hardware_test
-            PRIVATE
-                ASIO_SDK_AVAILABLE
-        )
-    endif()
+# ASIO Hardware Test (Registry-based, no SDK required)
+add_executable(asio_hardware_test "${SYNTRI_TEST_DIR}/asio_hardware_test.cpp")
+target_link_libraries(asio_hardware_test 
+    ole32      # COM system
+    advapi32   # Registry access
+)
+
+# =====================
+# ASIO DIAGNOSTICS
+# =====================
+# Keep the working diagnostic tool
+if(EXISTS "${SYNTRI_TEST_DIR}/asio_diagnostic.cpp")
+    add_executable(asio_diagnostic "${SYNTRI_TEST_DIR}/asio_diagnostic.cpp")
+    target_link_libraries(asio_diagnostic 
+        ole32 
+        advapi32
+    )
 endif()
 
-# ====================================
-# Installation
-# ====================================
-install(TARGETS SyntriCore basic_test interface_test comprehensive_test
-    LIBRARY DESTINATION lib
+# =====================
+# BUILD CONFIGURATION
+# =====================
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(SyntriCore PRIVATE DEBUG=1)
+else()
+    target_compile_definitions(SyntriCore PRIVATE NDEBUG=1)
+endif()
+
+# =====================
+# STATUS MESSAGES
+# =====================
+message(STATUS "==========================================")
+message(STATUS "         SYNTRI BUILD CONFIGURATION")
+message(STATUS "==========================================")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "Include Directory: ${SYNTRI_INCLUDE_DIR}")
+message(STATUS "Source Directory: ${SYNTRI_SRC_DIR}")
+message(STATUS "Test Directory: ${SYNTRI_TEST_DIR}")
+message(STATUS "")
+message(STATUS "Build Targets:")
+message(STATUS "  - SyntriCore (library)")
+message(STATUS "  - basic_test")
+message(STATUS "  - interface_test")
+message(STATUS "  - comprehensive_test")
+message(STATUS "  - asio_hardware_test")
+if(EXISTS "${SYNTRI_TEST_DIR}/asio_diagnostic.cpp")
+    message(STATUS "  - asio_diagnostic")
+endif()
+message(STATUS "==========================================")
+
+# =====================
+# INSTALLATION (Optional)
+# =====================
+install(TARGETS SyntriCore
     ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
     RUNTIME DESTINATION bin
 )
 
-if(WIN32)
-    install(TARGETS asio_diagnostic asio_hardware_test RUNTIME DESTINATION bin)
-endif()
-
-install(DIRECTORY include/ DESTINATION include FILES_MATCHING PATTERN "*.h")
-
-# ====================================
-# Build Summary
-# ====================================
-message(STATUS "")
-message(STATUS "🎯 Complete Build Summary:")
-message(STATUS "   ✅ SyntriCore library (working)")
-message(STATUS "   ✅ basic_test executable (working)")
-message(STATUS "   ✅ interface_test executable (working)")  
-message(STATUS "   ✅ comprehensive_test executable (working)")
-if(WIN32)
-    message(STATUS "   🔍 asio_diagnostic tool (working)")
-    message(STATUS "   🎵 asio_hardware_test (NEW - tests real hardware)")
-endif()
-
-message(STATUS "")
-message(STATUS "📋 Build Instructions:")
-message(STATUS "   # Complete system with ASIO")
-message(STATUS "   cmake .. -G \"Visual Studio 17 2022\" -A x64 -DENABLE_ASIO_SUPPORT=ON")
-message(STATUS "   cmake --build . --config Release")
-message(STATUS "")
-message(STATUS "🧪 Test Instructions:")
-message(STATUS "   Release\\basic_test.exe              # Foundation")
-message(STATUS "   Release\\interface_test.exe          # Interface layer")
-message(STATUS "   Release\\comprehensive_test.exe      # Complete system")
-if(WIN32)
-    message(STATUS "   Release\\asio_diagnostic.exe         # ASIO environment")
-    message(STATUS "   Release\\asio_hardware_test.exe      # Hardware communication")
-endif()
-message(STATUS "")
-message(STATUS "🎵 ASIO Hardware Test:")
-message(STATUS "   Tests communication with your detected drivers:")
-message(STATUS "   - Yamaha Steinberg USB ASIO")
-message(STATUS "   - iConnectivity ASIO Driver") 
-message(STATUS "   - ASIO4ALL v2")
-message(STATUS "   - And validates professional latency capability")
-message(STATUS "")
-message(STATUS "🎉 Ready for professional audio development!")
-message(STATUS "")
+install(DIRECTORY ${SYNTRI_INCLUDE_DIR}/
+    DESTINATION include
+    FILES_MATCHING PATTERN "*.h"
+)
